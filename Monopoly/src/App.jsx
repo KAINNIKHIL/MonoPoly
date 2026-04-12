@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import Join from "./Join.jsx";
-import Player from "./Player.jsx";
+import Join from "./Join";
+import Player from "./Player";
 
 function App() {
   const [player, setPlayer] = useState(null);
