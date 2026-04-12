@@ -36,14 +36,14 @@ export default function Join({ setPlayer }) {
       playerId,
       name,
       gameId: code,
-      balance: 3000,
+      balance: 10000,
       loanTaken: 0,
       loanLimit: 5000
     };
 
     await set(ref(db, `games/${code}/players/${playerId}`), {
       name,
-      balance: 3000,
+      balance: 10000,
       loanTaken: 0,
       loanLimit: 5000
     });
@@ -80,7 +80,7 @@ export default function Join({ setPlayer }) {
     playerId,
     name,
     gameId: code,
-    balance: 3000,
+    balance: 10000,
     loanTaken: 0,
     loanLimit: 5000
   };
@@ -88,7 +88,7 @@ export default function Join({ setPlayer }) {
   // 🔥 ONLY NOW ADD PLAYER
   await set(ref(db, `games/${code}/players/${playerId}`), {
     name,
-    balance: 3000,
+    balance: 10000,
     loanTaken: 0,
     loanLimit: 5000
   });
