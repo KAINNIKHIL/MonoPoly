@@ -2,6 +2,7 @@ import { useState } from "react";
 import { db } from "./firebase";
 import { ref, set, get } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
+import toast from "react-hot-toast";
 
 export default function Join({ setPlayer }) {
   const [name, setName] = useState("");
@@ -17,7 +18,7 @@ export default function Join({ setPlayer }) {
   // 🟢 CREATE GAME
   const createGame = async () => {
     if (!name) {
-      alert("Enter your name");
+      toast("Enter your name");
       return;
     }
 
@@ -57,7 +58,7 @@ export default function Join({ setPlayer }) {
   // 🔵 JOIN GAME
   const joinGame = async () => {
   if (!name || !gameId) {
-    alert("Enter name and game ID");
+    toast("Enter name and game ID");
     return;
   }
 
@@ -69,7 +70,7 @@ export default function Join({ setPlayer }) {
   const gameSnap = await get(ref(db, `games/${code}`));
 
   if (!gameSnap.exists()) {
-    alert("Game does not exist ❌");
+    toast.error("Game does not exist ❌");
     setLoading(false);
     return;
   }
@@ -100,73 +101,80 @@ export default function Join({ setPlayer }) {
 };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white p-4">
-      <div className="w-full max-w-sm bg-gray-800 p-6 rounded-xl shadow-lg">
+  <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center text-white p-4">
 
-        {/* TITLE */}
-        <h2 className="text-2xl font-bold text-center mb-4">
-          Multiplayer Game 🎮
-        </h2>
+    <div className="w-full max-w-sm bg-gray-800/70 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-gray-700">
 
-        {/* MODE SWITCH */}
-        <div className="flex mb-4 gap-2">
-          <button
-            className={`flex-1 p-2 rounded ${
-              mode === "join" ? "bg-blue-500" : "bg-gray-700"
-            }`}
-            onClick={() => setMode("join")}
-          >
-            Join
-          </button>
+      {/* TITLE */}
+      <h2 className="text-3xl font-bold text-center mb-1 tracking-wide">
+  🏦 Monopoly
+</h2>
+<p className="text-center text-gray-400 text-sm mb-5">
+  Build. Trade. Dominate.
+</p>
 
-          <button
-            className={`flex-1 p-2 rounded ${
-              mode === "create" ? "bg-blue-500" : "bg-gray-700"
-            }`}
-            onClick={() => setMode("create")}
-          >
-            Create
-          </button>
-        </div>
+      {/* MODE SWITCH */}
+      <div className="flex mb-5 bg-gray-700/50 p-1 rounded-xl">
+        <button
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "join"
+              ? "bg-blue-500 text-white shadow-md scale-105"
+              : "text-gray-300"
+          }`}
+          onClick={() => setMode("join")}
+        >
+          Join
+        </button>
 
-        {/* NAME */}
+        <button
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "create"
+              ? "bg-blue-500 text-white shadow-md scale-105"
+              : "text-gray-300"
+          }`}
+          onClick={() => setMode("create")}
+        >
+          Create
+        </button>
+      </div>
+
+      {/* INPUTS */}
+      <div className="space-y-3">
         <input
-          className="w-full p-3 mb-3 rounded bg-gray-700 border border-gray-600"
-          placeholder="Enter your name"
+          className="w-full p-3 rounded-lg bg-gray-700/80 border border-gray-600 focus:border-blue-500 focus:outline-none transition"
+          placeholder="👤 Your name"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
 
-        {/* JOIN INPUT */}
         {mode === "join" && (
           <input
-            className="w-full p-3 mb-3 rounded bg-gray-700 border border-gray-600"
-            placeholder="Enter Game Code"
+            className="w-full p-3 rounded-lg bg-gray-700/80 border border-gray-600 focus:border-blue-500 focus:outline-none uppercase tracking-widest text-center transition"
+            placeholder="🎯 GAME CODE"
             value={gameId}
-            onChange={(e) => setGameId(e.target.value.toUpperCase())}
+            onChange={(e) =>
+              setGameId(e.target.value.toUpperCase())
+            }
           />
         )}
-
-        {/* BUTTON */}
-        {mode === "join" ? (
-          <button
-            className="w-full p-3 rounded bg-blue-500 hover:bg-blue-600 font-semibold"
-            onClick={joinGame}
-            disabled={loading}
-          >
-            {loading ? "Joining..." : "Join Game"}
-          </button>
-        ) : (
-          <button
-            className="w-full p-3 rounded bg-blue-500 hover:bg-blue-600 font-semibold"
-            onClick={createGame}
-            disabled={loading}
-          >
-            {loading ? "Creating..." : "Create Game"}
-          </button>
-        )}
-
       </div>
+
+      {/* BUTTON */}
+      <button
+        className="w-full mt-5 p-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:scale-[1.03] active:scale-95 transition-all font-semibold shadow-lg disabled:opacity-50"
+        onClick={mode === "join" ? joinGame : createGame}
+        disabled={loading}
+      >
+        {loading
+          ? mode === "join"
+            ? "Joining..."
+            : "Creating..."
+          : mode === "join"
+          ? "🚀 Join Game"
+          : "✨ Create Game"}
+      </button>
+
     </div>
-  );
+  </div>
+);
 }
