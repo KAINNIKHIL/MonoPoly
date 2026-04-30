@@ -1,17 +1,30 @@
 import { useEffect, useRef } from "react";
 
-export default function ActivityFeed({ transactions, players = {} }) {
+export default function ActivityFeed({
+  transactions,
+  players = {}
+}) {
   const feedRef = useRef(null);
 
   /* =========================
      🧠 FORMAT MESSAGE
   ========================= */
   const formatMessage = (txn) => {
-    if (!txn) return { text: "", type: "default" };
+    if (!txn) {
+      return {
+        text: "",
+        type: "default"
+      };
+    }
 
+    /* 🤝 DEAL PURCHASE */
     if (txn.type === "dealPurchase") {
       const buyerNames = txn.buyers
-        ?.map(b => players[b.playerId]?.name || "Unknown")
+        ?.map(
+          (b) =>
+            players[b.playerId]?.name ||
+            "Unknown"
+        )
         .join(" & ");
 
       return {
@@ -21,6 +34,22 @@ export default function ActivityFeed({ transactions, players = {} }) {
       };
     }
 
+    /* 💰 SELL DEAL */
+    if (txn.type === "sellDeal") {
+      const buyerName =
+        txn.buyer === "Bank"
+          ? "Bank"
+          : players?.[txn.buyer]?.name ||
+            "Unknown";
+
+      return {
+        text: `${txn.seller} sold ${txn.percent}% of ${txn.cardName} to ${buyerName}`,
+        sub: `₹${txn.amount}`,
+        type: "sell"
+      };
+    }
+
+    /* 🏦 OTHER TRANSACTIONS */
     switch (txn.reason) {
       case "Payment":
         return {
@@ -63,7 +92,9 @@ export default function ActivityFeed({ transactions, players = {} }) {
   ========================= */
   const formatTime = (time) => {
     if (!time) return "";
+
     const d = new Date(time);
+
     return d.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit"
@@ -75,6 +106,7 @@ export default function ActivityFeed({ transactions, players = {} }) {
   ========================= */
   const typeStyles = {
     deal: "bg-purple-500/20",
+    sell: "bg-orange-500/20",
     payment: "bg-blue-500/20",
     loan: "bg-yellow-500/20",
     income: "bg-green-500/20",
@@ -83,7 +115,7 @@ export default function ActivityFeed({ transactions, players = {} }) {
   };
 
   /* =========================
-     🔥 AUTO SCROLL (TOP)
+     🔥 AUTO SCROLL
   ========================= */
   useEffect(() => {
     if (feedRef.current) {
@@ -93,7 +125,7 @@ export default function ActivityFeed({ transactions, players = {} }) {
 
   return (
     <div className="flex flex-col h-full mt-4">
-      
+
       {/* HEADER */}
       <h3 className="mb-3 font-semibold text-sm text-gray-300">
         Activity
@@ -104,8 +136,12 @@ export default function ActivityFeed({ transactions, players = {} }) {
         ref={feedRef}
         className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1"
       >
-        {Object.entries(transactions)
-          .sort((a, b) => (b[1]?.time || 0) - (a[1]?.time || 0))
+        {Object.entries(transactions || {})
+          .sort(
+            (a, b) =>
+              (b[1]?.time || 0) -
+              (a[1]?.time || 0)
+          )
           .slice(0, 12)
           .map(([id, txn]) => {
             const msg = formatMessage(txn);
@@ -115,7 +151,8 @@ export default function ActivityFeed({ transactions, players = {} }) {
                 key={id}
                 className="flex items-start gap-3 bg-gray-900/70 border border-white/10 p-3 rounded-xl shadow-sm animate-fadeIn"
               >
-                {/* TYPE DOT */}
+
+                {/* DOT */}
                 <div
                   className={`w-2 h-2 mt-2 rounded-full ${typeStyles[msg.type]}`}
                 />
@@ -134,7 +171,7 @@ export default function ActivityFeed({ transactions, players = {} }) {
                 </div>
 
                 {/* TIME */}
-                <div className="text-[10px] text-gray-500">
+                <div className="text-[10px] text-gray-500 whitespace-nowrap">
                   {formatTime(txn.time)}
                 </div>
               </div>

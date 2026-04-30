@@ -4,6 +4,7 @@ import PropertyCard from "./PropertyCard";
 import DealPanel from "./DealPanel";
 import { voteDeal } from "../services/dealService";
 import toast from "react-hot-toast";
+import SellPanel from "./SellPanel";
 
 import {
   ref,
@@ -11,7 +12,7 @@ import {
 } from "firebase/database";
 
 import {
-  createDeal
+  createDeal, createSellDeal
 } from "../services/dealService";
 
 export default function CardsSection({ player, players }) {
@@ -22,6 +23,7 @@ export default function CardsSection({ player, players }) {
   const [selectedCard, setSelectedCard] = useState("");
   const [partners, setPartners] = useState([]);
   const [bidAmount, setBidAmount] = useState("");
+  const [mode, setMode] = useState("buy"); // "buy" | "sell"
   const industries = [
   "All",
   ...new Set(Object.values(cards).map(c => c.industry || "General"))
@@ -51,11 +53,11 @@ export default function CardsSection({ player, players }) {
   }, [player.gameId]);
 
   // 🧠 FILTERS
-  const myCards = Object.entries(cards).filter(([id]) =>
-    cardStates[id]?.owners?.some(
-      o => o.playerId === player.playerId
-    )
-  );
+  const myCards = Object.entries(cards).filter(([id]) => {
+  const owners = cardStates?.[id]?.owners || [];
+
+  return owners.some(o => String(o.playerId) === String(player.playerId));
+});
 
   const availableCards = Object.entries(cards).filter(
     ([id]) => !cardStates[id]?.owners?.length
@@ -64,6 +66,7 @@ export default function CardsSection({ player, players }) {
   const pendingDeals = Object.entries(deals).filter(
   ([_, d]) => d.status === "pending"
 );
+
 
 
   // 🤝 CREATE DEAL HANDLER
@@ -78,10 +81,10 @@ export default function CardsSection({ player, players }) {
     //return;
   //}
 
-  if (totalPercent !== 100) {
-    toast.error("Total share must be 100%");
-    return;
-  }
+  if (totalPercent > 100) {
+  toast.error("Total exceeds 100%");
+  return;
+}
 
   if (!bidAmount || Number(bidAmount) <= 0) {
     toast.error("Enter valid amount");
@@ -104,7 +107,7 @@ export default function CardsSection({ player, players }) {
       }
     });
 
-    toast.success("Deal created 🚀");
+    toast.success("Deal created ");
   } catch (err) {
     console.error(err);
     toast.error("Failed to create deal");
@@ -203,25 +206,92 @@ const filteredAvailableCards = Object.entries(cards).filter(
             card={card}
             state={cardStates[id]}
             players={players}
+            onSell={() => {
+    setMode("sell");
+    setSelectedCard(id);
+  }}
           />
         ))}
       </div>
 
-      {/* 🤝 CREATE DEAL */}
-    <div className="mb-6">  
-      <DealPanel
-  players={players}
-  player={player}
-  selectedCard={selectedCard}
-  setSelectedCard={setSelectedCard}
-  availableCards={availableCards}
-  partners={partners}
-  setPartners={setPartners}
-  bidAmount={bidAmount}
-  setBidAmount={setBidAmount}
-  createDeal={handleCreateDeal}
-/>
+
+
+          {/* 🎛️ MODE SWITCH */}
+<div className="relative flex p-1 mb-5 mt-4 bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+
+  {/* ACTIVE BG */}
+  <div
+    className={`absolute top-1 bottom-1 w-1/2 rounded-xl transition-all duration-300
+    ${
+      mode === "buy"
+        ? "left-1 bg-blue-600"
+        : "left-[calc(50%-4px)] bg-yellow-500"
+    }`}
+  />
+
+  {/* BUY */}
+  <button
+    onClick={() => setMode("buy")}
+    className={`relative z-10 flex-1 py-2.5 text-sm font-medium transition
+    ${
+      mode === "buy"
+        ? "text-white"
+        : "text-gray-400 hover:text-gray-200"
+    }`}
+  >
+    🤝 Buy / Deal
+  </button>
+
+  {/* SELL */}
+  <button
+    onClick={() => setMode("sell")}
+    className={`relative z-10 flex-1 py-2.5 text-sm font-medium transition
+    ${
+      mode === "sell"
+        ? "text-black"
+        : "text-gray-400 hover:text-gray-200"
+    }`}
+  >
+    💰 Sell
+  </button>
 </div>
+
+{/* 📦 PANEL */}
+<div
+  className={`mb-6 transition-all duration-300 ${
+    mode === "buy"
+      ? "animate-in fade-in slide-in-from-left-2"
+      : "animate-in fade-in slide-in-from-right-2"
+  }`}
+>
+  {mode === "buy" ? (
+    <DealPanel
+      players={players}
+      player={player}
+      selectedCard={selectedCard}
+      setSelectedCard={setSelectedCard}
+      availableCards={availableCards}
+      partners={partners}
+      setPartners={setPartners}
+      bidAmount={bidAmount}
+      setBidAmount={setBidAmount}
+      createDeal={handleCreateDeal}
+    />
+  ) : (
+    <SellPanel
+      player={player}
+      players={players}
+      myCards={myCards}
+      cardStates={cardStates}
+      selectedCard={selectedCard}
+      setSelectedCard={setSelectedCard}
+      createSellDeal={createSellDeal}
+    />
+  )}
+</div>
+
+
+
 {/* 📩 PENDING DEALS */}
 <h3 className="mt-6 mb-2 font-semibold">📩 Pending Deals</h3>
 
@@ -233,7 +303,13 @@ const filteredAvailableCards = Object.entries(cards).filter(
   const isPartner = d.members?.some(
   m => m.playerId === player.playerId
 );
-  const hasVoted = d.approvals?.[player.playerId] !== undefined;
+
+
+  const hasVoted =
+  d.approvals?.[
+    String(player.playerId)
+  ] !== undefined;
+
 
   return (
     <div
@@ -273,24 +349,46 @@ const filteredAvailableCards = Object.entries(cards).filter(
 
       {/* MEMBERS */}
       <div className="flex flex-wrap gap-1 mb-3">
-        {d.members.map((m) => (
+        {(d.members|| []).map((m) => (
           <span
             key={m.playerId}
             className="text-[10px] px-2 py-1 rounded-full bg-white/10"
           >
-            {players[m.playerId]?.name} • {m.percent}%
+            {players[m.playerId]?.name}
+
+{/* 🤝 BUY DEAL */}
+{d.type !== "sell" && (
+  <> • {m.percent}%</>
+)}
+
+{/* 💰 SELL DEAL */}
+{d.type === "sell" &&
+  String(m.playerId) === String(d.sellerId) && (
+    <> • Selling {d.percent}%</>
+)}
+
+{d.type === "sell" &&
+  String(m.playerId) === String(d.buyerId) && (
+    <> • Buying {d.percent}%</>
+)}
           </span>
         ))}
       </div>
 
       {/* ACTIONS */}
-      {/* ACTIONS */}
-{d.status === "pending" && (
+    
+{d.status === "pending" &&
+(
+  d.type !== "sell" ||
+  d.members?.some(
+    m => String(m.playerId) === String(player.playerId)
+  )
+) && (
   <>
-    {d.approvals?.[player.playerId] !== undefined ? (
-      <p className="text-xs text-gray-400 text-center">
-        You voted
-      </p>
+    {hasVoted ? (
+      <div className="text-xs text-center py-2 rounded-lg bg-white/5 text-gray-400">
+        You already voted
+      </div>
     ) : (
       <div className="flex gap-2">
         <button
@@ -305,7 +403,7 @@ const filteredAvailableCards = Object.entries(cards).filter(
       deals
     });
 
-    toast.success("Approved 👍");
+    toast.success("Approved ");
   } catch (err) {
     toast.error("Vote failed");
   }
@@ -327,7 +425,7 @@ const filteredAvailableCards = Object.entries(cards).filter(
       deals
     });
 
-    toast.success("Rejected ❌");
+    toast.error("Rejected ");
   } catch (err) {
     toast.error("Vote failed");
   }

@@ -89,7 +89,7 @@ const notEnough = myBalance < yourCost;
 </div>
 
       {/* PARTNER INFO */}
-      <p className="text-sm text-gray-400 mb-2">
+      <p className="text-sm text-gray-400 m-4">
         {partners.length === 0
           ? "Buying solo (100% ownership)"
           : "Split ownership with partners"}

@@ -17,8 +17,54 @@ export const voteDeal = async ({
 
   const dealRef = ref(db, `games/${gameId}/cardDeals/${dealId}`);
 
+  // ❌ already voted
   if (deal.approvals?.[playerId] !== undefined) return;
 
+  // 🔵 SELL DEAL (buyer-only approval)
+  if (deal.type === "sell") {
+
+  // ❌ only members can vote
+  const isMember = deal.members?.some(
+    m => m.playerId === playerId
+  );
+
+  if (!isMember) return;
+
+  const approvals = {
+    ...deal.approvals,
+    [playerId]: decision
+  };
+
+  await update(dealRef, { approvals });
+
+  // ❌ even one reject = full reject
+  const rejected = Object.values(approvals)
+    .includes(false);
+
+  if (rejected) {
+    await update(dealRef, {
+      status: "rejected"
+    });
+
+    return;
+  }
+
+  // ✅ all approved
+  const allApproved = deal.members.every(
+    m => approvals[m.playerId] === true
+  );
+
+  if (allApproved) {
+    return executeSellDeal({
+      dealId,
+      gameId
+    });
+  }
+
+  return;
+}
+
+  // 🟢 BUY DEAL (your old logic)
   const approvals = {
     ...deal.approvals,
     [playerId]: decision
@@ -40,6 +86,7 @@ export const voteDeal = async ({
     await executeDeal({ dealId, gameId });
   }
 };
+
 
 /* =========================
    🚀 EXECUTE DEAL
@@ -198,4 +245,232 @@ export const createDeal = async ({
     console.error("CreateDeal Error:", err);
     throw err;
   }
+};
+
+
+
+
+export const createSellDeal = async ({
+  player,
+  card,
+  percent,
+  price,
+  buyerId,
+  gameId
+}) => {
+  if (!buyerId) throw new Error("Select buyer");
+
+  if (!percent || percent <= 0) {
+    throw new Error("Invalid percentage");
+  }
+
+  if (!price || price <= 0) {
+    throw new Error("Invalid price");
+  }
+
+  // 👥 get all current owners
+  const cardRef = ref(
+    db,
+    `games/${gameId}/cardStates/${card.id}`
+  );
+
+  const cardSnap = await get(cardRef);
+
+  const cardState = cardSnap.val();
+
+  const members = [
+  {
+    playerId: player.playerId
+  },
+  {
+    playerId: buyerId
+  }
+];
+
+await push(
+  ref(db, `games/${gameId}/cardDeals`),
+  {
+    type: "sell",
+
+    cardId: card.id,
+    cardName: card.name,
+
+    sellerId: player.playerId,
+    buyerId,
+
+    percent,
+    price,
+
+    members,
+
+    approvals: {
+  [player.playerId]: true
+},
+    status: "pending",
+    createdAt: Date.now()
+  }
+);
+};
+
+
+
+export const executeSellDeal = async ({
+  dealId,
+  gameId
+}) => {
+  const dealRef = ref(
+    db,
+    `games/${gameId}/cardDeals/${dealId}`
+  );
+
+  const snap = await get(dealRef);
+  const deal = snap.val();
+
+  if (!deal || deal.status !== "pending") return;
+
+  const {
+    sellerId,
+    buyerId,
+    percent,
+    price,
+    cardId
+  } = deal;
+
+  const cardRef = ref(
+    db,
+    `games/${gameId}/cardStates/${cardId}`
+  );
+
+  const cardSnap = await get(cardRef);
+  const cardState = cardSnap.val();
+
+  let owners = cardState?.owners || [];
+
+  const seller = owners.find(
+    o => o.playerId === sellerId
+  );
+
+  // ❌ seller invalid
+  if (!seller || seller.percent < percent) {
+    await update(dealRef, {
+      status: "rejected"
+    });
+
+    return;
+  }
+
+  /* =========================
+     💰 BUYER PAYMENT
+  ========================= */
+
+  if (buyerId !== "bank") {
+    const buyerRef = ref(
+      db,
+      `games/${gameId}/players/${buyerId}`
+    );
+
+    const buyerSnap = await get(buyerRef);
+    const buyer = buyerSnap.val();
+
+    // ❌ insufficient balance
+    if (!buyer || buyer.balance < price) {
+      await update(dealRef, {
+        status: "rejected"
+      });
+
+      return;
+    }
+
+    // deduct buyer money
+    await update(buyerRef, {
+      balance: buyer.balance - price
+    });
+  }
+
+  /* =========================
+     💵 GIVE SELLER MONEY
+  ========================= */
+
+  const sellerRef = ref(
+    db,
+    `games/${gameId}/players/${sellerId}`
+  );
+
+  const sellerSnap = await get(sellerRef);
+  const sellerData = sellerSnap.val();
+
+  await update(sellerRef, {
+    balance:
+      (sellerData?.balance || 0) + Number(price)
+  });
+
+  /* =========================
+     🧠 UPDATE OWNERSHIP
+  ========================= */
+
+  let newOwners = owners
+    .map(o =>
+      o.playerId === sellerId
+        ? {
+            ...o,
+            percent:
+              o.percent - Number(percent)
+          }
+        : o
+    )
+    .filter(o => o.percent > 0);
+
+  // add buyer ownership
+  if (buyerId !== "bank") {
+    const existing = newOwners.find(
+      o => o.playerId === buyerId
+    );
+
+    if (existing) {
+      existing.percent += Number(percent);
+    } else {
+      newOwners.push({
+        playerId: buyerId,
+        percent: Number(percent)
+      });
+    }
+  }
+
+  await update(cardRef, {
+    owners: newOwners
+  });
+
+  /* =========================
+     📝 ACTIVITY LOG
+  ========================= */
+
+  await push(
+    ref(db, `games/${gameId}/transactions`),
+    {
+      type: "sellDeal",
+
+      seller:
+        sellerData?.name || sellerId,
+
+      buyer:
+        buyerId === "bank"
+          ? "Bank"
+          : buyerId,
+
+      percent,
+      amount: price,
+
+      cardName: deal.cardName,
+
+      time: Date.now()
+    }
+  );
+
+  /* =========================
+     ✅ COMPLETE
+  ========================= */
+
+  await update(dealRef, {
+    status: "completed"
+  });
 };

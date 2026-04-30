@@ -62,8 +62,13 @@ export default function PropertyCard({
   );
 
   const ownerNames = owners
-    .map((o) => players[o.playerId]?.name || "Unknown")
-    .join(", ");
+  .map((o) => {
+    const name =
+      players[o.playerId]?.name || "Unknown";
+
+    return `${name} (${o.percent}%)`;
+  })
+  .join(", ");
 
   const level = state?.level ?? card.level ?? 1;
 
@@ -214,9 +219,34 @@ const MultiplierDisplay = ({ multiplier = {}, level }) => {
       </div>
 
       {/* OWNERS */}
-      <div className="mt-3 text-[11px] text-white/70 truncate">
-        Owner: {ownerNames || "Unowned"}
+     <div className="mt-3">
+  <p className="text-[11px] text-white/60 mb-1">
+    Owners
+  </p>
+
+  <div className="flex flex-col gap-1">
+    {owners.length > 0 ? (
+      owners.map((o) => (
+        <div
+          key={o.playerId}
+          className="flex items-center justify-between bg-white/10 px-2 py-1 rounded-lg text-[11px]"
+        >
+          <span className="text-white/90">
+            {players[o.playerId]?.name || "Unknown"}
+          </span>
+
+          <span className="text-yellow-300 font-semibold">
+            {o.percent}%
+          </span>
+        </div>
+      ))
+    ) : (
+      <div className="text-[11px] text-white/50">
+        Unowned
       </div>
+    )}
+  </div>
+</div>
 
       {/* MORTGAGE */}
       {state?.mortgaged && (
