@@ -202,15 +202,17 @@ const filteredAvailableCards = Object.entries(cards).filter(
 
         {filteredMyCards.map(([id, card]) => (
           <PropertyCard
-            key={id}
-            card={card}
-            state={cardStates[id]}
-            players={players}
-            onSell={() => {
+  key={id}
+  card={card}
+  state={cardStates[id]}
+  players={players}
+  player={player}
+  cardId={id}
+  onSell={() => {
     setMode("sell");
     setSelectedCard(id);
   }}
-          />
+/>
         ))}
       </div>
 
@@ -374,6 +376,22 @@ const filteredAvailableCards = Object.entries(cards).filter(
           </span>
         ))}
       </div>
+
+
+
+
+{/* ❌ REJECT REASON */}
+{d.rejectReason && (
+  <div className="mb-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20">
+
+    <p className="text-xs text-red-300">
+      ❌ {d.rejectReason}
+    </p>
+
+  </div>
+)}
+
+
 
       {/* ACTIONS */}
     

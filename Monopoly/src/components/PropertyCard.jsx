@@ -1,3 +1,9 @@
+import {
+  mortgageShare,
+  unmortgageShare
+} from "../services/dealService";
+
+
 export default function PropertyCard({
   card,
   state,
@@ -56,6 +62,9 @@ export default function PropertyCard({
 
   // 👥 OWNERS
   const owners = state?.owners || [];
+  const myOwnership = owners.find(
+  o => o.playerId === player?.playerId
+);
 
   const isMine = owners.some(
     (o) => o.playerId === player?.playerId
@@ -219,25 +228,35 @@ const MultiplierDisplay = ({ multiplier = {}, level }) => {
       </div>
 
       {/* OWNERS */}
-     <div className="mt-3">
-  <p className="text-[11px] text-white/60 mb-1">
+     {/* OWNERS */}
+<div className="mt-3">
+  <div className="text-[11px] text-white/60 mb-1">
     Owners
-  </p>
+  </div>
 
   <div className="flex flex-col gap-1">
     {owners.length > 0 ? (
       owners.map((o) => (
         <div
           key={o.playerId}
-          className="flex items-center justify-between bg-white/10 px-2 py-1 rounded-lg text-[11px]"
+          className="flex items-center justify-between
+          text-[11px] bg-white/5 rounded px-2 py-1"
         >
-          <span className="text-white/90">
-            {players[o.playerId]?.name || "Unknown"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-white/90">
+              {players[o.playerId]?.name || "Unknown"}
+            </span>
 
-          <span className="text-yellow-300 font-semibold">
-            {o.percent}%
-          </span>
+            <span className="text-white/50">
+              ({o.percent}%)
+            </span>
+          </div>
+
+          {o.mortgaged && (
+            <span className="text-red-300 text-[10px]">
+              Mortgaged
+            </span>
+          )}
         </div>
       ))
     ) : (
@@ -256,7 +275,54 @@ const MultiplierDisplay = ({ multiplier = {}, level }) => {
       )}
 
       {/* BUY */}
-      
+      {/* 🏦 MORTGAGE ACTIONS */}
+{myOwnership && (
+  <div className="mt-3 flex gap-2">
+
+    {!myOwnership.mortgaged ? (
+      <button
+        onClick={() =>
+          mortgageShare({
+            gameId: player.gameId,
+            cardId,
+            playerId: player.playerId,
+            cards: {
+              [cardId]: card
+            }
+          })
+        }
+        className="flex-1 bg-yellow-500/20
+        hover:bg-yellow-500/30
+        border border-yellow-400/30
+        text-yellow-200 text-[11px]
+        py-2 rounded-lg transition"
+      >
+        Mortgage Share
+      </button>
+    ) : (
+      <button
+        onClick={() =>
+          unmortgageShare({
+            gameId: player.gameId,
+            cardId,
+            playerId: player.playerId,
+            cards: {
+              [cardId]: card
+            }
+          })
+        }
+        className="flex-1 bg-green-500/20
+        hover:bg-green-500/30
+        border border-green-400/30
+        text-green-200 text-[11px]
+        py-2 rounded-lg transition"
+      >
+        Unmortgage Share
+      </button>
+    )}
+
+  </div>
+)}
     </div>
   );
 }

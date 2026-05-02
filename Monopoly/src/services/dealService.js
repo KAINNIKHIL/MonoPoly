@@ -55,11 +55,28 @@ export const voteDeal = async ({
   );
 
   if (allApproved) {
-    return executeSellDeal({
+
+  try {
+
+    return await executeSellDeal({
       dealId,
       gameId
     });
+
+  } catch (err) {
+
+    console.error(err);
+
+    await update(dealRef, {
+      status: "rejected",
+      rejectReason:
+        err.message ||
+        "Deal execution failed"
+    });
+
+    return;
   }
+}
 
   return;
 }
@@ -200,11 +217,13 @@ export const createDeal = async ({
     const members = [
       {
         playerId: player.playerId,
-        percent: yourPercent
+        percent: yourPercent,
+        mortgaged: false
       },
       ...partners.map(p => ({
         playerId: p.playerId,
-        percent: Number(p.percent || 0)
+        percent: Number(p.percent || 0),
+        mortgaged: false
       }))
     ];
 
@@ -258,7 +277,10 @@ export const createSellDeal = async ({
   buyerId,
   gameId
 }) => {
-  if (!buyerId) throw new Error("Select buyer");
+
+  if (!buyerId) {
+    throw new Error("Select buyer");
+  }
 
   if (!percent || percent <= 0) {
     throw new Error("Invalid percentage");
@@ -268,7 +290,7 @@ export const createSellDeal = async ({
     throw new Error("Invalid price");
   }
 
-  // 👥 get all current owners
+  // 👥 card state
   const cardRef = ref(
     db,
     `games/${gameId}/cardStates/${card.id}`
@@ -278,38 +300,74 @@ export const createSellDeal = async ({
 
   const cardState = cardSnap.val();
 
+  const owners = cardState?.owners || [];
+
+  // 🧠 seller ownership
+  const seller = owners.find(
+    o =>
+      String(o.playerId) ===
+      String(player.playerId)
+  );
+
+  // ❌ not owner
+  if (!seller) {
+    throw new Error(
+      "You are not owner"
+    );
+  }
+
+  // ❌ mortgaged property
+  if (seller.mortgaged) {
+    throw new Error(
+      "Unmortgage property first"
+    );
+  }
+
+  // ❌ selling more than owned
+  if (
+    Number(percent) >
+    Number(seller.percent)
+  ) {
+    throw new Error(
+      "You don't own that much share"
+    );
+  }
+
+  // 👥 deal members
   const members = [
-  {
-    playerId: player.playerId
-  },
-  {
-    playerId: buyerId
-  }
-];
+    {
+      playerId: player.playerId
+    },
+    {
+      playerId: buyerId
+    }
+  ];
 
-await push(
-  ref(db, `games/${gameId}/cardDeals`),
-  {
-    type: "sell",
+  // 🚀 create deal
+  await push(
+    ref(db, `games/${gameId}/cardDeals`),
+    {
+      type: "sell",
 
-    cardId: card.id,
-    cardName: card.name,
+      cardId: card.id,
+      cardName: card.name,
 
-    sellerId: player.playerId,
-    buyerId,
+      sellerId: player.playerId,
+      buyerId,
 
-    percent,
-    price,
+      percent,
+      price,
 
-    members,
+      members,
 
-    approvals: {
-  [player.playerId]: true
-},
-    status: "pending",
-    createdAt: Date.now()
-  }
-);
+      approvals: {
+        [player.playerId]: true
+      },
+
+      status: "pending",
+      createdAt: Date.now()
+    }
+  );
 };
 
 
@@ -318,15 +376,19 @@ export const executeSellDeal = async ({
   dealId,
   gameId
 }) => {
+
   const dealRef = ref(
     db,
     `games/${gameId}/cardDeals/${dealId}`
   );
 
   const snap = await get(dealRef);
+
   const deal = snap.val();
 
-  if (!deal || deal.status !== "pending") return;
+  if (!deal || deal.status !== "pending") {
+    return;
+  }
 
   const {
     sellerId,
@@ -336,54 +398,134 @@ export const executeSellDeal = async ({
     cardId
   } = deal;
 
+  /* =========================
+     🧠 CARD STATE
+  ========================= */
+
   const cardRef = ref(
     db,
     `games/${gameId}/cardStates/${cardId}`
   );
 
   const cardSnap = await get(cardRef);
+
   const cardState = cardSnap.val();
 
-  let owners = cardState?.owners || [];
+  const owners = cardState?.owners || [];
+
+  /* =========================
+     👤 SELLER
+  ========================= */
 
   const seller = owners.find(
-    o => o.playerId === sellerId
+    o =>
+      String(o.playerId) ===
+      String(sellerId)
   );
 
-  // ❌ seller invalid
-  if (!seller || seller.percent < percent) {
+  // ❌ seller not found
+  if (!seller) {
+
     await update(dealRef, {
-      status: "rejected"
+      status: "rejected",
+      rejectReason:
+        "Seller is not owner"
     });
 
-    return;
+    throw new Error(
+      "Seller is not owner"
+    );
   }
 
+  // ❌ mortgaged share
+  if (seller?.mortgaged === true) {
+
+    await update(dealRef, {
+      status: "rejected",
+      rejectReason:
+        "Unmortgage property first"
+    });
+
+    throw new Error(
+      "Unmortgage property first"
+    );
+  }
+
+  // ❌ invalid share
+  if (
+    Number(percent) >
+    Number(seller.percent)
+  ) {
+
+    await update(dealRef, {
+      status: "rejected",
+      rejectReason:
+        `Seller only owns ${seller.percent}%`
+    });
+
+    throw new Error(
+      `Seller only owns ${seller.percent}%`
+    );
+  }
+  /* =========================
+   ❌ BUYER HAS MORTGAGED SHARE
+========================= */
+
+const buyerOwner = owners.find(
+  o =>
+    String(o.playerId) ===
+    String(buyerId)
+);
+
+if (buyerOwner?.mortgaged === true) {
+
+  await update(dealRef, {
+    status: "rejected",
+    rejectReason:
+      "Buyer must unmortgage existing share first"
+  });
+
+  throw new Error(
+    "Buyer must unmortgage existing share first"
+  );
+}
   /* =========================
      💰 BUYER PAYMENT
   ========================= */
 
   if (buyerId !== "bank") {
+
     const buyerRef = ref(
       db,
       `games/${gameId}/players/${buyerId}`
     );
 
     const buyerSnap = await get(buyerRef);
+
     const buyer = buyerSnap.val();
 
     // ❌ insufficient balance
-    if (!buyer || buyer.balance < price) {
+    if (
+      !buyer ||
+      Number(buyer.balance) < Number(price)
+    ) {
+
       await update(dealRef, {
-        status: "rejected"
+        status: "rejected",
+        rejectReason:
+          "Buyer doesn't have enough balance"
       });
 
-      return;
+      throw new Error(
+        "Buyer doesn't have enough balance"
+      );
     }
 
-    // deduct buyer money
+    // 💸 deduct buyer money
     await update(buyerRef, {
-      balance: buyer.balance - price
+      balance:
+        Number(buyer.balance) -
+        Number(price)
     });
   }
 
@@ -397,11 +539,13 @@ export const executeSellDeal = async ({
   );
 
   const sellerSnap = await get(sellerRef);
+
   const sellerData = sellerSnap.val();
 
   await update(sellerRef, {
     balance:
-      (sellerData?.balance || 0) + Number(price)
+      Number(sellerData?.balance || 0) +
+      Number(price)
   });
 
   /* =========================
@@ -409,39 +553,63 @@ export const executeSellDeal = async ({
   ========================= */
 
   let newOwners = owners
-    .map(o =>
-      o.playerId === sellerId
-        ? {
-            ...o,
-            percent:
-              o.percent - Number(percent)
-          }
-        : o
-    )
-    .filter(o => o.percent > 0);
+    .map(o => {
 
-  // add buyer ownership
+      if (
+        String(o.playerId) ===
+        String(sellerId)
+      ) {
+
+        return {
+          ...o,
+          percent:
+            Number(o.percent) -
+            Number(percent)
+        };
+      }
+
+      return o;
+    })
+    .filter(o => Number(o.percent) > 0);
+
+  /* =========================
+     ➕ ADD BUYER SHARE
+  ========================= */
+
   if (buyerId !== "bank") {
-    const existing = newOwners.find(
-      o => o.playerId === buyerId
+
+    const existingBuyer = newOwners.find(
+      o =>
+        String(o.playerId) ===
+        String(buyerId)
     );
 
-    if (existing) {
-      existing.percent += Number(percent);
+    if (existingBuyer) {
+
+      existingBuyer.percent =
+        Number(existingBuyer.percent) +
+        Number(percent);
+
     } else {
+
       newOwners.push({
         playerId: buyerId,
-        percent: Number(percent)
+        percent: Number(percent),
+        mortgaged: false
       });
     }
   }
+
+  /* =========================
+     💾 SAVE OWNERS
+  ========================= */
 
   await update(cardRef, {
     owners: newOwners
   });
 
   /* =========================
-     📝 ACTIVITY LOG
+     📝 TRANSACTION
   ========================= */
 
   await push(
@@ -473,4 +641,174 @@ export const executeSellDeal = async ({
   await update(dealRef, {
     status: "completed"
   });
+};
+
+
+
+
+
+export const mortgageShare = async ({
+  gameId,
+  cardId,
+  playerId,
+  cards
+}) => {
+
+  const cardRef = ref(
+    db,
+    `games/${gameId}/cardStates/${cardId}`
+  );
+
+  const cardSnap = await get(cardRef);
+
+  const cardState = cardSnap.val();
+
+  if (!cardState) return;
+
+  const owners = cardState.owners || [];
+
+  const owner = owners.find(
+    o => String(o.playerId) === String(playerId)
+  );
+
+  if (!owner || owner.mortgaged) return;
+
+  const card = cards[cardId];
+
+  const mortgageAmount =
+    (Number(card.mortgageValue || 0) *
+      Number(owner.percent || 0)) / 100;
+
+  // 💰 player balance
+  const playerRef = ref(
+    db,
+    `games/${gameId}/players/${playerId}`
+  );
+
+  const playerSnap = await get(playerRef);
+
+  const playerData = playerSnap.val();
+
+  await update(playerRef, {
+    balance:
+      (playerData.balance || 0) +
+      mortgageAmount
+  });
+
+  // 🧠 update mortgage state
+  const updatedOwners = owners.map(o =>
+    String(o.playerId) === String(playerId)
+      ? {
+          ...o,
+          mortgaged: true
+        }
+      : o
+  );
+
+  await update(cardRef, {
+    owners: updatedOwners
+  });
+
+  // 📝 activity
+  await push(
+    ref(db, `games/${gameId}/transactions`),
+    {
+      type: "mortgage",
+      player:
+        playerData?.name || playerId,
+      cardName: card.name,
+      amount: mortgageAmount,
+      percent: owner.percent,
+      time: Date.now()
+    }
+  );
+};
+
+
+
+export const unmortgageShare = async ({
+  gameId,
+  cardId,
+  playerId,
+  cards
+}) => {
+
+  const cardRef = ref(
+    db,
+    `games/${gameId}/cardStates/${cardId}`
+  );
+
+  const cardSnap = await get(cardRef);
+
+  const cardState = cardSnap.val();
+
+  if (!cardState) return;
+
+  const owners = cardState.owners || [];
+
+  const owner = owners.find(
+    o => String(o.playerId) === String(playerId)
+  );
+
+  if (!owner || !owner.mortgaged) return;
+
+  const card = cards[cardId];
+
+  const unmortgageAmount =
+    (Number(card.mortgageValue || 0) *
+      Number(owner.percent || 0)) / 100;
+
+  const playerRef = ref(
+    db,
+    `games/${gameId}/players/${playerId}`
+  );
+
+  const playerSnap = await get(playerRef);
+
+  const playerData = playerSnap.val();
+
+  // ❌ insufficient balance
+  if (
+    (playerData.balance || 0) <
+    unmortgageAmount
+  ) {
+    throw new Error(
+      "Not enough balance"
+    );
+  }
+
+  // 💰 deduct money
+  await update(playerRef, {
+    balance:
+      playerData.balance -
+      unmortgageAmount
+  });
+
+  // 🧠 remove mortgage
+  const updatedOwners = owners.map(o =>
+    String(o.playerId) === String(playerId)
+      ? {
+          ...o,
+          mortgaged: false
+        }
+      : o
+  );
+
+  await update(cardRef, {
+    owners: updatedOwners
+  });
+
+  // 📝 activity
+  await push(
+    ref(db, `games/${gameId}/transactions`),
+    {
+      type: "unmortgage",
+      player:
+        playerData?.name || playerId,
+      cardName: card.name,
+      amount: unmortgageAmount,
+      percent: owner.percent,
+      time: Date.now()
+    }
+  );
 };
