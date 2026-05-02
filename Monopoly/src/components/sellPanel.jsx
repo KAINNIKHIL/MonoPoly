@@ -412,7 +412,7 @@ export default function SellPanel({
           }
         `}
       >
-        Create Sell Offer
+        Create Selling Offer 
       </button>
     </div>
   );
