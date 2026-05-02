@@ -4,7 +4,7 @@ import PropertyCard from "./PropertyCard";
 import DealPanel from "./DealPanel";
 import { voteDeal } from "../services/dealService";
 import toast from "react-hot-toast";
-import SellPanel from "./SellPanel.jsx";
+import SellPanel from "./SellPanel";
 
 import {
   ref,
